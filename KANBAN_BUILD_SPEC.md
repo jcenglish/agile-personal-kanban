@@ -44,7 +44,8 @@ agile-kanban/
 │   │   │   ├── story.py
 │   │   │   ├── sprint.py
 │   │   │   ├── column.py
-│   │   │   └── template.py
+│   │   │   ├── template.py
+|   |   |   └── sprint_snapshot.py
 │   │   ├── schemas/                  # Pydantic v2 request/response schemas
 │   │   │   ├── board.py
 │   │   │   ├── epic.py
@@ -324,7 +325,7 @@ The agent builds all scaffolding, boilerplate, CRUD, and static UI shells.
 - [x] Sprint service: file with method signatures, docstrings, and `raise NotImplementedError`
 - [x] Analytics service: file with method signatures, docstrings, and `raise NotImplementedError`
 - [x] `requirements.txt`: fastapi, uvicorn, sqlalchemy[asyncio], aiosqlite, alembic, pydantic, python-dotenv
-- [x] Seed data: one board "Personal", columns "To Do" / "In Progress" / "Review" / "Done" (Done marked `is_done_column=true`), one planning sprint "Sprint 1", three templates: "Exercise", "Grocery shopping", "Laundry"
+- [x] Create a standalone script to create seed data in `/backend/seed.py` to ran once manually: one board "Personal", columns "To Do" / "In Progress" / "Review" / "Done" (Done marked `is_done_column=true`), one planning sprint "Sprint 1", three templates: "Exercise", "Grocery shopping", "Laundry"
 
 ### Frontend (Agent)
 
