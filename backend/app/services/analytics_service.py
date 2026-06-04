@@ -1,5 +1,72 @@
-from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import date, timedelta
+from typing import Sequence
 
+from fastapi import HTTPException
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.models.board import Board
+from app.models.sprint import Sprint
+from app.models.story import Story
+from app.models.column import Column
+from app.models.sprint_snapshot import SprintSnapshot
+
+async def _get_board(board_id: str, db: AsyncSession) -> Board:
+    result = await db.execute(
+        select(Board)
+        .where(Board.id == board_id)
+    )
+    board = result.scalar_one_or_none()
+    if not board:
+        raise HTTPException(status_code=404, detail=f"Board {board_id} not found")
+    return board
+
+async def _get_completed_sprints_with_stories_and_snapshots(board_id:str, last_n:int, db:AsyncSession) -> Sequence[Sprint]:
+    result = await db.execute(
+        select(Sprint)
+        .options(selectinload(Sprint.stories).selectinload(Story.column))
+        .options(selectinload(Sprint.snapshots))
+        .where((Sprint.board_id == board_id) & (Sprint.status == 'completed'))
+        .order_by(Sprint.end_date.desc())
+        .limit(last_n)
+    )
+    sprints = result.scalars().all()
+    return sprints
+
+async def _get_sprint(sprint_id: str, db: AsyncSession) -> Sprint:
+    result = await db.execute(select(Sprint).where(Sprint.id == sprint_id))
+    sprint = result.scalar_one_or_none()
+    if not sprint:
+        raise HTTPException(status_code=404, detail=f"Sprint {sprint_id} not found")
+    return sprint
+
+async def _get_sprint_with_stories(sprint_id: str, db: AsyncSession) -> Sprint:
+    result = await db.execute(
+        select(Sprint)
+        .options(selectinload(Sprint.stories))
+        .where(Sprint.id == sprint_id)
+    )
+    sprint = result.scalar_one_or_none()
+    if sprint is None:
+        raise HTTPException(status_code=404, detail=f"Sprint {sprint_id} not found")
+    return sprint
+
+async def _get_snapshot_for_today(sprint_id: str, db: AsyncSession) -> SprintSnapshot | None:
+    result = await db.execute(select(SprintSnapshot).where((SprintSnapshot.sprint_id == sprint_id) & (SprintSnapshot.snapshot_date == date.today())))
+    sprint_snapshot = result.scalar_one_or_none()
+    
+    return sprint_snapshot
+
+async def _get_snapshots(sprint_id: str, db: AsyncSession) -> Sequence[SprintSnapshot]:
+    result = await db.execute(
+        select(SprintSnapshot)
+        .where(SprintSnapshot.sprint_id == sprint_id)
+        .order_by(SprintSnapshot.snapshot_date)
+    )
+    snapshots = result.scalars().all()
+
+    return snapshots
 
 async def take_snapshot(sprint_id: str, db: AsyncSession) -> None:
     """
@@ -17,10 +84,41 @@ async def take_snapshot(sprint_id: str, db: AsyncSession) -> None:
     Raises:
         HTTPException 404: sprint not found
     """
-    raise NotImplementedError("User implements")
+    sprint = await _get_sprint_with_stories(sprint_id, db)
+    column_ids = {s.column_id for s in sprint.stories if s.column_id}
+    columns_by_id = {}
+    if column_ids:
+        result = await db.execute(select(Column).where(Column.id.in_(column_ids)))
+        columns_by_id = {c.id: c for c in result.scalars().all()}
+    
+    points_completed = 0
+    points_remaining = 0
 
+    for story in sprint.stories:
+        if story.column_id and columns_by_id[story.column_id].is_done_column:
+            points_completed += story.points or 0
+        else:
+            points_remaining += story.points or 0
+    
+    snapshot = await _get_snapshot_for_today(sprint_id, db)
 
-async def get_burndown(sprint_id: str, db: AsyncSession) -> list[dict]:
+    if snapshot is None:
+        snapshot = SprintSnapshot(
+            sprint_id=sprint_id,
+            snapshot_date=date.today(),
+            points_completed=0,
+            points_remaining=0
+        )
+        db.add(snapshot)
+
+    snapshot.points_completed = points_completed
+    snapshot.points_remaining = points_remaining
+
+    await db.commit()
+    await db.refresh(snapshot)
+
+#TODO: typeddict
+async def get_burndown(sprint_id: str, db: AsyncSession) -> list[dict[str, int | date | None]]:
     """
     Return burndown data for a sprint as a list of daily data points.
 
@@ -42,10 +140,57 @@ async def get_burndown(sprint_id: str, db: AsyncSession) -> list[dict]:
     Raises:
         HTTPException 404: sprint not found
     """
-    raise NotImplementedError("User implements")
+    sprint = await _get_sprint(sprint_id, db)
+    if sprint.start_date is None:
+        return []
+    
+    start_date = sprint.start_date
+    end_date = min(date.today(), sprint.end_date) if sprint.end_date else date.today()
+    days = (end_date - start_date).days 
+    days = max(days, 0)
+    dates = [start_date + timedelta(days=i) for i in range(days + 1)]
 
+    snapshots = await _get_snapshots(sprint_id, db)
 
-async def get_velocity(board_id: str, db: AsyncSession, last_n: int = 5) -> list[dict]:
+    if snapshots:
+        total_points = snapshots[0].points_completed + snapshots[0].points_remaining
+    else:
+        total_points = sum(s.points or 0 for s in sprint.stories)
+    
+    denominator = (dates[-1] - dates[0]).days or 1
+    ideal_line: dict[date, int] = {}
+
+    for i, d in enumerate(dates):
+        fraction = i / denominator if denominator > 0 else 1.0
+        ideal_line[d] = int(round(total_points * (1 - fraction)))
+
+    actual_map: dict[date, int] = {s.snapshot_date: s.points_remaining for s in snapshots}
+
+    today = date.today()
+    if today in dates and today not in actual_map:
+        column_ids = {s.column_id for s in sprint.stories if s.column_id}
+        columns_by_id = {}
+        if column_ids:
+            r = await db.execute(select(Column).where(Column.id.in_(column_ids)))
+            columns_by_id = {c.id: c for c in r.scalars().all()}
+        live_remaining = 0
+        for s in sprint.stories:
+            if s.column_id and columns_by_id[s.column_id].is_done_column:
+                continue
+            live_remaining += s.points or 0
+        actual_map[today] = live_remaining
+
+    out: list[dict[str, int | date | None]] = []
+    for d in sorted(dates):
+        out.append({
+            "date": d,
+            "ideal_remaining": ideal_line.get(d, 0),
+            "actual_remaining": actual_map.get(d, None)
+        })
+    return out
+        
+
+async def get_velocity(board_id: str, db: AsyncSession, last_n: int = 5) -> list[dict[str, str |int]]:
     """
     Return velocity data for the last N completed sprints on a board.
 
@@ -65,4 +210,20 @@ async def get_velocity(board_id: str, db: AsyncSession, last_n: int = 5) -> list
     Raises:
         HTTPException 404: board not found
     """
-    raise NotImplementedError("User implements")
+    await _get_board(board_id, db) # TODO: This feels weird
+
+    sprints = await _get_completed_sprints_with_stories_and_snapshots(board_id, last_n, db)
+    
+    out: list[dict[str, int | str]] = [] # [{ sprint_name, committed_points, completed_points }, ...]
+
+    for sprint in sprints:
+        out.append(
+            {
+                "sprint_name": sprint.name,
+                "committed_points": (sprint.snapshots[0].points_remaining + sprint.snapshots[0].points_completed) if sprint.snapshots else sum(s.points or 0 for s in sprint.stories),
+                "completed_points": sum(s.points or 0 for s in sprint.stories if s.column and s.column.is_done_column)
+            }
+        )
+
+    return list(reversed(out))
+
