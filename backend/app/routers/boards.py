@@ -12,11 +12,10 @@ from app.schemas.board import BoardCreate, BoardResponse, BoardUpdate
 
 router = APIRouter(tags=["boards"])
 
-DEFAULT_COLUMNS = [
+DEFAULT_COLUMNS: list[dict[str, str | int | bool]] = [
     {"name": "To Do", "position": 0, "is_done_column": False},
-    {"name": "In Progress", "position": 1, "is_done_column": False},
-    {"name": "Review", "position": 2, "is_done_column": False},
-    {"name": "Done", "position": 3, "is_done_column": True},
+    {"name": "Doing", "position": 1, "is_done_column": False},
+    {"name": "Done", "position": 2, "is_done_column": True},
 ]
 
 

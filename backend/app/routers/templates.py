@@ -6,7 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.board import Board
+from app.models.story import Story
 from app.models.template import Template
+from app.schemas.story import StoryResponse
 from app.schemas.template import TemplateCreate, TemplateResponse, TemplateUpdate
 
 router = APIRouter(tags=["templates"])
@@ -14,10 +16,10 @@ router = APIRouter(tags=["templates"])
 
 async def _get_template(template_id: str, db: AsyncSession) -> Template:
     result = await db.execute(select(Template).where(Template.id == template_id))
-    tmpl = result.scalar_one_or_none()
-    if not tmpl:
+    template = result.scalar_one_or_none()
+    if not template:
         raise HTTPException(status_code=404, detail=f"Template {template_id} not found")
-    return tmpl
+    return template
 
 
 @router.get("/boards/{board_id}/templates", response_model=list[TemplateResponse])
@@ -34,7 +36,7 @@ async def create_template(board_id: str, payload: TemplateCreate, db: AsyncSessi
     board = await db.get(Board, board_id)
     if not board:
         raise HTTPException(status_code=404, detail=f"Board {board_id} not found")
-    tmpl = Template(
+    template = Template(
         id=str(uuid.uuid4()),
         board_id=board_id,
         title=payload.title,
@@ -44,30 +46,30 @@ async def create_template(board_id: str, payload: TemplateCreate, db: AsyncSessi
         energy_type=payload.energy_type,
         epic_id=payload.epic_id,
     )
-    db.add(tmpl)
+    db.add(template)
     await db.commit()
-    await db.refresh(tmpl)
-    return tmpl
+    await db.refresh(template)
+    return template
 
 
 @router.put("/templates/{template_id}", response_model=TemplateResponse)
 async def update_template(template_id: str, payload: TemplateUpdate, db: AsyncSession = Depends(get_db)):
-    tmpl = await _get_template(template_id, db)
+    template = await _get_template(template_id, db)
     for field, value in payload.model_dump(exclude_unset=True).items():
-        setattr(tmpl, field, value)
+        setattr(template, field, value)
     await db.commit()
-    await db.refresh(tmpl)
-    return tmpl
+    await db.refresh(template)
+    return template
 
 
 @router.delete("/templates/{template_id}", status_code=204)
 async def delete_template(template_id: str, db: AsyncSession = Depends(get_db)):
-    tmpl = await _get_template(template_id, db)
-    await db.delete(tmpl)
+    template = await _get_template(template_id, db)
+    await db.delete(template)
     await db.commit()
 
 
-@router.post("/templates/{template_id}/instantiate")
+@router.post("/templates/{template_id}/instantiate", response_model=StoryResponse, status_code=201)
 async def instantiate_template(template_id: str, db: AsyncSession = Depends(get_db)):
     """
     Create a new Story in the backlog from this template.
@@ -91,4 +93,23 @@ async def instantiate_template(template_id: str, db: AsyncSession = Depends(get_
     Raises:
         HTTPException 404: template not found
     """
-    raise NotImplementedError("User implements")
+    template = await _get_template(template_id, db)
+
+    story = Story(
+        id=str(uuid.uuid4()), # TODO: Do I need to create the ID here?
+        board_id=template.board_id,
+        title=template.title,
+        points=template.points,
+        is_urgent   = template.is_urgent,
+        is_important = template.is_important,
+        energy_type = template.energy_type,
+        epic_id     = template.epic_id,
+        sprint_id   = None,
+        column_id   = None,
+        position    = None,
+    )
+
+    db.add(story)
+    await db.commit()
+    await db.refresh(story)
+    return story
