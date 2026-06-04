@@ -10,7 +10,7 @@ Read `KANBAN_BUILD_SPEC.md` for the full specification before writing any code.
 
 ```bash
 # Backend
-cd backend && source venv/bin/activate
+cd backend && source .venv/bin/activate
 uvicorn app.main:app --reload --port 8000
 
 # Frontend
