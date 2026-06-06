@@ -1,13 +1,20 @@
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { UseMutationResult, UseQueryResult } from "@tanstack/react-query";
 import type { Sprint } from "../types";
 import type { SprintCreate, SprintUpdate } from "../api/sprints";
+import * as sprintApi from "../api/sprints";
+import toast from "react-hot-toast";
+import { ApiError } from "../api/ApiError";
 
 /**
  * useSprints — list all sprints for a board.
  * Query key: ['sprints', boardId]
  */
-export function useSprints(_boardId: string): UseQueryResult<Sprint[]> {
-  throw new Error("USER IMPLEMENTS");
+export function useSprints(boardId: string): UseQueryResult<Sprint[]> {
+  return useQuery({
+    queryKey: ["sprints", boardId],
+    queryFn: () => sprintApi.getSprints(boardId),
+  });
 }
 
 /**
@@ -15,9 +22,19 @@ export function useSprints(_boardId: string): UseQueryResult<Sprint[]> {
  * On success, invalidate ['sprints', boardId].
  */
 export function useCreateSprint(
-  _boardId: string
+  boardId: string,
 ): UseMutationResult<Sprint, Error, SprintCreate> {
-  throw new Error("USER IMPLEMENTS");
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: SprintCreate) =>
+      sprintApi.createSprint(boardId, payload),
+    onSuccess: async () => {
+      queryClient.invalidateQueries({queryKey: ['sprints', boardId]})
+    },
+    onError: (err: ApiError) => {
+      toast.error(err.message)
+    }
+  })
 }
 
 /**
@@ -25,9 +42,19 @@ export function useCreateSprint(
  * On success, invalidate ['sprints', boardId].
  */
 export function useUpdateSprint(
-  _boardId: string
+  boardId: string
 ): UseMutationResult<Sprint, Error, { sprintId: string } & SprintUpdate> {
-  throw new Error("USER IMPLEMENTS");
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({sprintId, ...update}) =>
+      sprintApi.updateSprint(sprintId, update),
+    onSuccess: async () => {
+      queryClient.invalidateQueries({ queryKey: ['sprints', boardId] })
+    },
+    onError: (err: ApiError) => {
+      toast.error(err.message)
+    }
+  })
 }
 
 /**
@@ -38,9 +65,24 @@ export function useUpdateSprint(
  * The server may 409 if another sprint is already active — surface via toast.
  */
 export function useStartSprint(
-  _boardId: string
+  boardId: string
 ): UseMutationResult<Sprint, Error, string> {
-  throw new Error("USER IMPLEMENTS");
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (sprintId: string) =>
+      sprintApi.startSprint(sprintId),
+    onSuccess: async () => {
+      queryClient.invalidateQueries({ queryKey: ['sprints', boardId] })
+      queryClient.invalidateQueries({ queryKey: ['stories', boardId] })
+    },
+    onError: (err: ApiError) => {
+      if (err.status === 409) {
+        toast.error("Another sprint is already active.")
+      } else {
+        toast.error(err.message)
+      }
+    }
+  })
 }
 
 /**
@@ -50,9 +92,21 @@ export function useStartSprint(
  * and ['backlog', boardId] because unfinished stories move to the backlog.
  */
 export function useCompleteSprint(
-  _boardId: string
+  boardId: string
 ): UseMutationResult<Sprint, Error, string> {
-  throw new Error("USER IMPLEMENTS");
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (sprintId: string) =>
+      sprintApi.completeSprint(sprintId),
+    onSuccess: async () => {
+      queryClient.invalidateQueries({ queryKey: ['sprints', boardId] })
+      queryClient.invalidateQueries({ queryKey: ['stories', boardId] })
+      queryClient.invalidateQueries({ queryKey: ['backlog', boardId] })
+    },
+    onError: (err: ApiError) => {
+      toast.error(err.message)
+    }
+  })
 }
 
 /**
@@ -60,7 +114,17 @@ export function useCompleteSprint(
  * On success, invalidate ['sprints', boardId].
  */
 export function useDeleteSprint(
-  _boardId: string
+  boardId: string
 ): UseMutationResult<void, Error, string> {
-  throw new Error("USER IMPLEMENTS");
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (sprintId: string) =>
+      sprintApi.deleteSprint(sprintId),
+    onSuccess: async () => {
+      queryClient.invalidateQueries({ queryKey: ['sprints', boardId] })
+    },
+    onError: (err: ApiError) => {
+      toast.error(err.message)
+    }
+  })
 }

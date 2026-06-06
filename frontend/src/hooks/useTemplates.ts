@@ -1,13 +1,19 @@
-import type { UseMutationResult, UseQueryResult } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type UseMutationResult, type UseQueryResult } from "@tanstack/react-query";
 import type { Story, Template } from "../types";
 import type { TemplateCreate, TemplateUpdate } from "../api/templates";
+import * as templateApi from "../api/templates";
+import { ApiError } from "../api/ApiError";
+import toast from "react-hot-toast";
 
 /**
  * useTemplates — list all templates for a board.
  * Query key: ['templates', boardId]
  */
-export function useTemplates(_boardId: string): UseQueryResult<Template[]> {
-  throw new Error("USER IMPLEMENTS");
+export function useTemplates(boardId: string): UseQueryResult<Template[]> {
+  return useQuery({
+    queryKey: ["templates", boardId],
+    queryFn: () => templateApi.getTemplates(boardId),
+  });
 }
 
 /**
@@ -15,9 +21,19 @@ export function useTemplates(_boardId: string): UseQueryResult<Template[]> {
  * On success, invalidate ['templates', boardId].
  */
 export function useCreateTemplate(
-  _boardId: string
+  boardId: string
 ): UseMutationResult<Template, Error, TemplateCreate> {
-  throw new Error("USER IMPLEMENTS");
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: TemplateCreate) =>
+      templateApi.createTemplate(boardId, payload),
+    onSuccess: async () => {
+      queryClient.invalidateQueries({ queryKey: ['templates', boardId] })
+    },
+    onError: (err: ApiError) => {
+      toast.error(err.message)
+    }
+  })
 }
 
 /**
@@ -25,9 +41,19 @@ export function useCreateTemplate(
  * On success, invalidate ['templates', boardId].
  */
 export function useUpdateTemplate(
-  _boardId: string
+  boardId: string
 ): UseMutationResult<Template, Error, { templateId: string } & TemplateUpdate> {
-  throw new Error("USER IMPLEMENTS");
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({templateId, ...payload}) =>
+      templateApi.updateTemplate(templateId, payload),
+    onSuccess: async () => {
+      queryClient.invalidateQueries({ queryKey: ['templates', boardId] })
+    },
+    onError: (err: ApiError) => {
+      toast.error(err.message)
+    }
+  })
 }
 
 /**
@@ -35,9 +61,19 @@ export function useUpdateTemplate(
  * On success, invalidate ['templates', boardId].
  */
 export function useDeleteTemplate(
-  _boardId: string
+  boardId: string
 ): UseMutationResult<void, Error, string> {
-  throw new Error("USER IMPLEMENTS");
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (boardId) =>
+      templateApi.deleteTemplate(boardId),
+    onSuccess: async () => {
+      queryClient.invalidateQueries({ queryKey: ['templates', boardId] })
+    },
+    onError: (err: ApiError) => {
+      toast.error(err.message)
+    }
+  })
 }
 
 /**
@@ -48,7 +84,17 @@ export function useDeleteTemplate(
  * immediately without a manual refresh.
  */
 export function useInstantiateTemplate(
-  _boardId: string
+  boardId: string
 ): UseMutationResult<Story, Error, string> {
-  throw new Error("USER IMPLEMENTS");
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (templateId) =>
+      templateApi.instantiateTemplate(templateId),
+    onSuccess: async () => {
+      queryClient.invalidateQueries({ queryKey: ['backlog', boardId] })
+    },
+    onError: (err: ApiError) => {
+      toast.error(err.message)
+    }
+  })
 }

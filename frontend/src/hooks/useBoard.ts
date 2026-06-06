@@ -1,6 +1,9 @@
-import type { UseMutationResult, UseQueryResult } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type UseMutationResult, type UseQueryResult } from "@tanstack/react-query";
 import type { Board } from "../types";
 import type { BoardUpdate } from "../api/boards";
+import * as boardApi from "../api/boards";
+import { ApiError } from "../api/ApiError";
+import toast from "react-hot-toast";
 
 /**
  * useBoard — fetch a board with its columns.
@@ -9,8 +12,11 @@ import type { BoardUpdate } from "../api/boards";
  * Uses stale-while-revalidate; refetches on window focus by default.
  * Returns the Board object including the `columns` array.
  */
-export function useBoard(_boardId: string): UseQueryResult<Board> {
-  throw new Error("USER IMPLEMENTS");
+export function useBoard(boardId: string): UseQueryResult<Board> {
+  return useQuery({
+    queryKey: ["board", boardId],
+    queryFn: () => boardApi.getBoard(boardId),
+  });
 }
 
 /**
@@ -21,7 +27,18 @@ export function useBoard(_boardId: string): UseQueryResult<Board> {
  * reflects the rename.
  */
 export function useUpdateBoard(
-  _boardId: string
+  boardId: string
 ): UseMutationResult<Board, Error, BoardUpdate> {
-  throw new Error("USER IMPLEMENTS");
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: BoardUpdate) =>
+      boardApi.updateBoard(boardId, payload),
+    onSuccess: async () => {
+      queryClient.invalidateQueries({queryKey: ['board', boardId]})
+      queryClient.invalidateQueries({queryKey: ['boards']})
+    },
+    onError: (err: ApiError) => {
+      toast.error(err.message)
+    }
+  })
 }

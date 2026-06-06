@@ -1,21 +1,30 @@
-import type { UseMutationResult, UseQueryResult } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient, type UseMutationResult, type UseQueryResult } from "@tanstack/react-query";
 import type { Story } from "../types";
 import type { StoryCreate, StoryMoveRequest, StoryUpdate } from "../api/stories";
+import * as storyApi from "../api/stories";
+import toast from "react-hot-toast";
+import { ApiError } from "../api/ApiError";
 
 /**
  * useStories — fetch all stories for a board (active sprint stories).
  * Query key: ['stories', boardId]
  */
-export function useStories(_boardId: string): UseQueryResult<Story[]> {
-  throw new Error("USER IMPLEMENTS");
+export function useStories(boardId: string): UseQueryResult<Story[]> {
+  return useQuery({
+    queryKey: ["stories", boardId],
+    queryFn: () => storyApi.getStories(boardId)
+  })
 }
 
 /**
  * useBacklog — fetch stories where sprint_id IS NULL.
  * Query key: ['backlog', boardId]
  */
-export function useBacklog(_boardId: string): UseQueryResult<Story[]> {
-  throw new Error("USER IMPLEMENTS");
+export function useBacklog(boardId: string): UseQueryResult<Story[]> {
+  return useQuery({
+    queryKey: ['backlog', boardId],
+    queryFn: () => storyApi.getBacklog(boardId)
+  })
 }
 
 /**
@@ -32,9 +41,42 @@ export function useBacklog(_boardId: string): UseQueryResult<Story[]> {
  * even when the mutation errors, ensuring the cache never stays stale.
  */
 export function useMoveStory(
-  _boardId: string
+  boardId: string
 ): UseMutationResult<Story, Error, { storyId: string } & StoryMoveRequest> {
-  throw new Error("USER IMPLEMENTS");
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ storyId, ...payload }) => storyApi.moveStory(storyId, payload),
+    onMutate: async ({ storyId, ...payload }) => {
+      await queryClient.cancelQueries({ queryKey: ["stories", boardId] })
+
+      const previousStories = queryClient.getQueryData<Story[]>([
+        "stories",
+        boardId,
+      ])
+
+      if (previousStories) {
+        const optimisticStories = previousStories.map((story) =>
+          story.id === storyId
+            ? { ...story, column_id: payload.column_id }
+            : story
+        )
+
+        queryClient.setQueryData(["stories", boardId], optimisticStories)
+      }
+
+      return { previousStories }
+    },
+    onSettled: async () => queryClient.invalidateQueries({ queryKey: ['stories', boardId] }),
+    onError: (err: ApiError, _variables, context) => {
+      if (context?.previousStories) {
+        queryClient.setQueryData(
+          ["stories", boardId],
+          context.previousStories
+        )
+      }
+      toast.error(err.message)
+    },
+  })
 }
 
 /**
@@ -42,9 +84,19 @@ export function useMoveStory(
  * On success, invalidate ['stories', boardId] and ['backlog', boardId].
  */
 export function useCreateStory(
-  _boardId: string
+  boardId: string
 ): UseMutationResult<Story, Error, StoryCreate> {
-  throw new Error("USER IMPLEMENTS");
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: StoryCreate) => storyApi.createStory(boardId, payload),
+    onSuccess: async () => {
+      queryClient.invalidateQueries({queryKey: ['stories', boardId]})
+      queryClient.invalidateQueries({queryKey: ['backlog', boardId]})
+    },
+    onError: (err: ApiError) => {
+      toast.error(err.message)
+    }
+  })
 }
 
 /**
@@ -52,9 +104,19 @@ export function useCreateStory(
  * On success, invalidate ['stories', boardId] and ['backlog', boardId].
  */
 export function useUpdateStory(
-  _boardId: string
+  boardId: string
 ): UseMutationResult<Story, Error, { storyId: string } & StoryUpdate> {
-  throw new Error("USER IMPLEMENTS");
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({storyId, ...payload}) => storyApi.updateStory(boardId, payload),
+    onSuccess: async () => {
+      queryClient.invalidateQueries({queryKey: ['stories', boardId]})
+      queryClient.invalidateQueries({queryKey: ['backlog', boardId]})
+    },
+    onError: (err: ApiError) => {
+      toast.error(err.message)
+    }
+  })
 }
 
 /**
@@ -62,7 +124,17 @@ export function useUpdateStory(
  * On success, invalidate ['stories', boardId] and ['backlog', boardId].
  */
 export function useDeleteStory(
-  _boardId: string
+  boardId: string
 ): UseMutationResult<void, Error, string> {
-  throw new Error("USER IMPLEMENTS");
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (storyId) => storyApi.deleteStory(storyId),
+    onSuccess: async () => {
+      queryClient.invalidateQueries({queryKey: ['stories', boardId]})
+      queryClient.invalidateQueries({queryKey: ['backlog', boardId]})
+    },
+    onError: (err: ApiError) => {
+      toast.error(err.message)
+    }
+  })
 }
