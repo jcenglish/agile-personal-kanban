@@ -1,4 +1,4 @@
-import { useMutation, useQueries, useQuery, useQueryClient, type UseMutationResult, type UseQueryResult } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type UseMutationResult, type UseQueryResult } from "@tanstack/react-query";
 import type { Story } from "../types";
 import type { StoryCreate, StoryMoveRequest, StoryUpdate } from "../api/stories";
 import * as storyApi from "../api/stories";
