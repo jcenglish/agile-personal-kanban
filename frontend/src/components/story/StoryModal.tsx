@@ -1,4 +1,11 @@
-import type { Epic, Sprint } from "../../types";
+import { UseMutationResult, useQueryClient } from "@tanstack/react-query";
+import { useUIStore } from "../../store/uiStore";
+import type { EnergyType, Epic, Sprint, Story } from "../../types";
+import { useDeleteStory, useUpdateStory } from "../../hooks/useStories";
+import {  useState } from "react";
+import { StoryUpdate } from "../../api/stories";
+import PointsPicker from "./PointsPicker";
+import EnergyTypePicker from "./EnergyTypePicker";
 
 interface Props {
   boardId: string;
@@ -40,7 +47,122 @@ interface Props {
  * change; React Query will roll back on error. Use useMutation's onError
  * to restore the previous value and show a toast.
  */
-export default function StoryModal(_props: Props) {
+const TitleInput = ({ showTitleInput, setShowTitleInput, updateStory, storyTitle, setStoryTitle, storyId }: {
+  showTitleInput: boolean,
+  setShowTitleInput: (show: boolean) => void,
+  updateStory: UseMutationResult<Story, Error, {
+    storyId: string;
+  } & StoryUpdate>,
+  storyTitle: string,
+  setStoryTitle: (title: string) => void,
+  storyId: string
+}) => {
+  if (showTitleInput) {
+    return <input type="text" onKeyDown={(event) => {
+      event.preventDefault()
+      if (event.code === "Enter") {
+        updateStory.mutate({
+          storyId,
+          ...{ title: event.currentTarget.value }
+        })
+        event.currentTarget.value = ""
+        setStoryTitle(event.currentTarget.value)
+        setShowTitleInput(false)
+      }
+    }}/>
+  } else {
+    return <div onClick={() => setShowTitleInput(true)}>{storyTitle}</div>
+  }
+}
+
+export default function StoryModal({boardId, epics, sprints}: Props) {
   // TODO: USER IMPLEMENTS
-  return null;
+  const uiStore = useUIStore()
+  const selectedStoryId = useUIStore((state) => state.selectedStoryId)
+  const isModalOpen = useUIStore((state) => state.isModalOpen)
+  const queryClient = useQueryClient()
+  const [showTitleInput, setShowTitleInput] = useState(false)
+  const cachedStories = queryClient.getQueryData<Story[]>(["stories", boardId]);
+  const [points, setPoints] = useState<number |null>(null)
+  const [energyType, setEnergyType] = useState<EnergyType |null>(null)
+  const [urgentChecked, setUrgentChecked] = useState<boolean |null>(null)
+  const [importantChecked, setImportantChecked] = useState<boolean |null>(null)
+  
+  const story = cachedStories?.find(item => item.id === selectedStoryId)
+  const [storyTitle, setStoryTitle] = useState(story?.title ?? "")
+  const updateStory = useUpdateStory(boardId)
+  const deleteStory = useDeleteStory(boardId)
+  const sprint = sprints.find(sprint => sprint.board_id === boardId)
+
+  if (!isModalOpen || !selectedStoryId) return null;
+
+  if (!story) return null;
+
+  const handlePointsPicker = () => {
+    updateStory.mutate({ storyId: story.id, ...{ points } })
+    setPoints(points)
+  }
+
+  const handleDescription = (description: string) => {
+    updateStory.mutate({storyId: story.id, ...{description }})
+  }
+
+  const handleUrgentCheckbox = () => {
+    setUrgentChecked((prev) => !prev)
+    updateStory.mutate({ storyId: story.id, ...{ is_urgent: urgentChecked } })
+  }
+
+  const handleImportantCheckbox = () => {
+    setImportantChecked((prev) => !prev)
+    updateStory.mutate({ storyId: story.id, ...{ is_important: importantChecked } })
+  }
+
+  const handleEnergyPicker = () => {
+    updateStory.mutate({storyId: story.id, ...{energy_type: energyType }})
+    setEnergyType(energyType)
+  }
+
+  const handleDelete = () => {
+    const confirm = window.confirm("Delete?")
+    if (confirm) {
+      deleteStory.mutate(story.id)
+      uiStore.closeModal()
+    }
+  }
+
+  const handleClose = () => {
+    uiStore.closeModal()
+  }
+
+
+  return (
+    <div>
+      <div>
+        <button onClick={handleClose}>X</button>
+        <TitleInput showTitleInput={showTitleInput} setShowTitleInput={setShowTitleInput} updateStory={updateStory} storyTitle={storyTitle} setStoryTitle={setStoryTitle} storyId={story.id} />
+        <label>
+          Description:
+          <textarea rows={5} cols={40} value="" onBlur={(event) => handleDescription(event.currentTarget.value)} />
+        </label>
+        <label>
+          Points:
+          <PointsPicker value={points} onChange={ handlePointsPicker} />
+        </label>
+        <label>
+          Energy type:
+          <EnergyTypePicker value={energyType} onChange={ handleEnergyPicker} />
+        </label>
+        <label>
+          Urgent?:
+          <input type="checkbox" checked={!!urgentChecked} onClick={handleUrgentCheckbox} />
+        </label>
+        <label>
+          Important?:
+          <input type="checkbox" checked={!!importantChecked} onClick={handleImportantCheckbox} />
+        </label>
+        <div>{sprint ? sprint.name : "Backlog"}</div>
+        <button onClick={handleDelete}>Delete</button>
+      </div>
+    </div>
+  );
 }

@@ -1,5 +1,9 @@
+import { useDroppable } from "@dnd-kit/core";
 import type { Column, Story } from "../../types";
 import styles from "./KanbanColumn.module.css";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import StoryCard from "./StoryCard";
+import { useCreateStory } from "../../hooks/useStories";
 
 interface Props {
   column: Column;
@@ -30,7 +34,44 @@ interface Props {
  *    useCreateStory with { title, column_id: column.id, sprint_id } and
  *    position=last+1. After creation, clear the input.
  */
-export default function KanbanColumn(_props: Props) {
+export default function KanbanColumn({column, stories, boardId}: Props) {
   // TODO: USER IMPLEMENTS
-  return <div className={styles.column}>USER IMPLEMENTS: KanbanColumn</div>;
+  useDroppable({ id: column.id })
+  const totalColumnPoints = stories.reduce((acc, story) => acc += (story.points ?? 0), 0)
+  const sortedStories = stories.sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+  const storyIds = sortedStories.map(story => story.id)
+  const createStory = useCreateStory(boardId)
+  
+  return (
+    <div className={styles.column}>
+      <h1>{column.name}</h1>
+      <p>{`Stories: ${stories.length}`}</p>
+      <p>{`Total story points: ${totalColumnPoints}`}</p>
+      <div>
+        {sortedStories.map(story => {
+          return (
+            <SortableContext strategy={verticalListSortingStrategy} items={storyIds}>
+              <StoryCard story={story}/>
+            </SortableContext>
+          )
+        })}
+      </div>
+      <div>
+        Add story:
+        <label>Title:
+          <input type="text" onKeyDown={(event) => {
+            event.preventDefault()
+            if (event.code === "Enter" && event.currentTarget.value) {
+              createStory.mutate({
+                title: event.currentTarget.value,
+              })
+              event.currentTarget.value = ""
+              // TODO: Update API to handle creation of stories within column?
+            }
+          }}
+          />
+        </label>
+      </div>
+    </div>
+  );
 }

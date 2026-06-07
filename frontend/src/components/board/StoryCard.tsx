@@ -1,5 +1,8 @@
-import type { Epic, Story } from "../../types";
+import { CSS } from "@dnd-kit/utilities";
+import { useSortable } from "@dnd-kit/sortable";
+import type { EnergyType, Epic, Story } from "../../types";
 import styles from "./StoryCard.module.css";
+import { useUIStore } from "../../store/uiStore";
 
 interface Props {
   story: Story;
@@ -27,7 +30,46 @@ interface Props {
  * 3. On click (when not dragging): call uiStore.openModal(story.id) to open
  *    the StoryModal. Guard against triggering during drag.
  */
-export default function StoryCard(_props: Props) {
+export default function StoryCard({story}: Props) {
   // TODO: USER IMPLEMENTS
-  return <div className={styles.card}>USER IMPLEMENTS: StoryCard</div>;
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: story.id });
+  const openModal = useUIStore((state) => state.openModal);
+  
+  const energyLegend:Record<EnergyType, string> = {
+    "physical": "💪",
+    "cognitive": "🧠",
+    "emotional": "❤️",
+  }
+
+  const matrixLegend: Record<string, string> = {
+    urgent: "🚨",
+    important: "⭐"
+  }
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  };
+  
+  return (
+    <div
+      style={style}
+      className={styles.card}
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      onClick={() => {
+        if (!isDragging) {
+          openModal(story.id)
+        }
+      }}
+    >
+      <h3>{story.title}</h3>
+      <p>{story.points}</p>
+      <p>{story.energy_type ? energyLegend[story.energy_type] : null}</p>
+      <p>{story.is_important ? matrixLegend.important : null}</p>
+      <p>{story.is_urgent ? matrixLegend.urgent : null}</p>
+    </div>);
 }

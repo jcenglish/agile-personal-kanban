@@ -29,7 +29,9 @@ interface Props {
  *
  * 4. Empty state: "No templates yet. Create one to reuse recurring tasks."
  */
-export default function TemplateList(_props: Props) {
+export default function TemplateList({templates}: Props) {
   // TODO: USER IMPLEMENTS
-  return <div className={styles.list}>USER IMPLEMENTS: TemplateList</div>;
+  return <div className={styles.list}>
+    {templates.length === 0 && "No templates yet."}
+  </div>;
 }
