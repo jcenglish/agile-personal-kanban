@@ -1,5 +1,13 @@
 import { useParams } from "react-router-dom";
 import styles from "./BacklogPage.module.css";
+import SprintPanel from "../components/sprint/SprintPanel";
+import { useSprints } from "../hooks/useSprints";
+import { useBacklog, useCreateStory, useUpdateStory } from "../hooks/useStories";
+import { useTemplates } from "../hooks/useTemplates";
+import { useEpics } from "../hooks/useEpics";
+import { Epic, Sprint } from "../types";
+import TemplateList from "../components/template/TemplateList";
+import { useState } from "react";
 
 /**
  * BacklogPage — two-panel sprint planning view.
@@ -27,14 +35,63 @@ import styles from "./BacklogPage.module.css";
  * 5. Templates section (below backlog or in a collapsible panel):
  *    <TemplateList templates={templates} epics={epics} boardId={boardId} />
  */
+const storyEpic = (epicId: string | null, epics: Epic[]): Epic | undefined => {
+  if (epicId === null) return undefined
+  return epics.find(epic => epicId === epic.id)
+}
+
 export default function BacklogPage() {
   const { boardId } = useParams<{ boardId: string }>();
   if (!boardId) return null;
+  const backlogStories = useBacklog(boardId).data ?? []
+  const sprints = useSprints(boardId).data ?? []
+  const templates = useTemplates(boardId).data ?? []
+  const epics = useEpics(boardId).data ?? []
+  const createStory = useCreateStory(boardId)
+  const [storyTitle, setStoryTitle] = useState("")
+  const updateStory = useUpdateStory(boardId)
+  const [selectedSprint, setSelectedSprint] = useState<Sprint | null>(null)
+
+  const handleAddToSprint = (sprint: Sprint, storyId: string) => {
+    setSelectedSprint(sprint)
+    updateStory.mutate({storyId, ...{sprint_id: selectedSprint?.id}})
+  }
 
   // TODO: USER IMPLEMENTS
   return (
     <div className={styles.page}>
-      <p>USER IMPLEMENTS: BacklogPage</p>
+      <SprintPanel sprints={sprints} boardId={boardId} backlogStories={backlogStories}/>
+      <div>
+        <h1>{`Backlog ${backlogStories.length}`}</h1>
+        <form>
+          Add story:
+          <label>Title
+            <input type="text" onBlur={(event) => setStoryTitle(event.currentTarget.value)} />
+          </label>
+            <button type="submit" onClick={(event) => {
+            event.preventDefault()
+            createStory.mutate({ title: storyTitle })
+            setStoryTitle("")
+            }}>Submit</button>
+        </form>
+        <ul>
+          {backlogStories.map(({title, points, id, epic_id}) => (
+            <li key={id}>
+              {`${title} ${points ?? ""} ${storyEpic(epic_id, epics) ?? ""}`}
+              <label>Add to sprint
+                <select>
+                  {sprints.map(sprint => {
+                    return <option value={sprint.name} key={sprint.id} onClick={() => handleAddToSprint(sprint, id)}>
+                      {sprint.name}
+                    </option>
+                  })}
+                </select>
+                </label>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <TemplateList templates={templates} epics={epics} boardId={boardId} />
     </div>
   );
 }
