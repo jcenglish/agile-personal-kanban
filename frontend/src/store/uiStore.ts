@@ -1,3 +1,5 @@
+import { create } from 'zustand'
+
 /**
  * uiStore — Zustand store for ephemeral client UI state.
  *
@@ -38,6 +40,14 @@ export interface UIStore {
   clearDrag: () => void;
 }
 
-export function useUIStore(): UIStore {
-  throw new Error("USER IMPLEMENTS");
-}
+export const useUIStore = create<UIStore>((set) => ({
+  isModalOpen: false,
+  selectedStoryId: null,
+  isSidebarOpen: false,
+  dragState: { activeId: null },
+  openModal: () => set(() => ({isModalOpen: true})),
+  closeModal: () => set(() => ({isModalOpen: false})),
+  toggleSidebar: () => set((state) => ({isSidebarOpen: !state.isSidebarOpen})),
+  setDragActive: (id) => set(() => ({dragState: {activeId: id}})),
+  clearDrag: () => set(() => ({dragState: {activeId: null}}))
+}))
