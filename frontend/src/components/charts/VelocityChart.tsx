@@ -1,3 +1,4 @@
+import { Bar, BarChart, LabelList, LabelProps, Legend, Tooltip, XAxis, YAxis } from "recharts";
 import type { VelocityPoint } from "../../types";
 import styles from "./VelocityChart.module.css";
 
@@ -25,7 +26,24 @@ interface Props {
  *
  * 5. Handle empty data: show "No completed sprints yet."
  */
-export default function VelocityChart(_props: Props) {
+
+export default function VelocityChart({data}: Props) {
   // TODO: USER IMPLEMENTS
-  return <div className={styles.chart}>USER IMPLEMENTS: VelocityChart</div>;
+  const chartData = data.map(d => ({
+    ...d,
+    percentage: d.committed_points === 0 ? 0 : Math.round((d.completed_points / d.committed_points) * 100),
+  }));
+
+  return <div className={styles.chart}>
+    <BarChart data={chartData}>
+      <Bar dataKey="committed_points" fill="#cbd5e1" />
+      <Bar dataKey="completed_points" fill="#6366f1">
+      <LabelList dataKey="percentage" position="top" formatter={(value: number) => `${value}%`}/>
+      </Bar>
+      <XAxis dataKey={"sprint_name"} />
+      <YAxis label="Points" />
+      <Tooltip />
+      <Legend />
+    </BarChart>
+  </div>;
 }

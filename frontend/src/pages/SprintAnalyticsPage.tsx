@@ -1,5 +1,12 @@
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import styles from "./SprintAnalyticsPage.module.css";
+import { useSprints } from "../hooks/useSprints";
+import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import * as analyticsApi from "../api/analytics";
+import { BurndownPoint, VelocityPoint } from "../types";
+import BurndownChart from "../components/charts/BurndownChart";
+import VelocityChart from "../components/charts/VelocityChart";
 
 /**
  * SprintAnalyticsPage — charts for completed sprint analytics.
@@ -31,11 +38,38 @@ import styles from "./SprintAnalyticsPage.module.css";
 export default function SprintAnalyticsPage() {
   const { boardId } = useParams<{ boardId: string }>();
   if (!boardId) return null;
+  const sprints = useSprints(boardId).data ?? []
+  const completedSprints = sprints.filter(sprint => sprint.end_date !== null)
+  const [selectedSprintId, setSelectedSprintId] = useState<string | null>(null)
+  const [burndownData, setBurndownData] = useState<BurndownPoint[]>()
+  const [velocityData, setVelocityData] = useState<VelocityPoint[]>()
+  const [searchParams, _] = useSearchParams()
+
+  useEffect(() => {
+    if (selectedSprintId !== null) {
+      const burndown = useQuery({
+        queryKey: ["analytics", "burndown", selectedSprintId],
+        queryFn: () => analyticsApi.getBurndown(selectedSprintId)
+      })
+      const velocity = useQuery({
+        queryKey: ["analytics", "velocity", boardId],
+        queryFn: () => analyticsApi.getVelocity(boardId, Number(searchParams.get("last_n")))
+      })
+      setBurndownData(burndown.data)
+      setVelocityData(velocity.data)
+    }
+  }, [selectedSprintId])
 
   // TODO: USER IMPLEMENTS
   return (
     <div className={styles.page}>
-      <p>USER IMPLEMENTS: SprintAnalyticsPage</p>
+      <select onChange={(event) => setSelectedSprintId(event.currentTarget.value)}>
+        {completedSprints.map(sprint => (
+          <option key={sprint.id} value={sprint.id}>{sprint.name}</option>
+        ))}
+      </select>
+      {burndownData && <BurndownChart data={burndownData} isActive={false} />}
+      {velocityData && <VelocityChart data={velocityData} />}
     </div>
   );
 }

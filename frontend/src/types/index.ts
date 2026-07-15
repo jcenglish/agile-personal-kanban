@@ -82,7 +82,7 @@ export interface SprintSnapshot {
 export interface BurndownPoint {
   date: string;
   ideal_remaining: number;
-  actual_remaining: number;
+  actual_remaining: number | null;
 }
 
 export interface VelocityPoint {
